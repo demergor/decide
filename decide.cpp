@@ -5,13 +5,13 @@
 #include <stdexcept>
 #include <unordered_map>
 
-bool is_number(const char* cstr) {
+bool is_number(const char* cstr, const bool negative_allowed) {
   if (cstr[0] != '-' && !std::isdigit(cstr[0])) {
     return false;
   }
 
   return std::all_of(
-    cstr,
+    cstr + negative_allowed,
     cstr + std::strlen(cstr),
     [] (const unsigned char c) {
       return std::isdigit(c);
@@ -71,13 +71,13 @@ void help_flag(const char** args, const int argc, std::mt19937& rng) {
     "'decide' (50% chance for yes/no)\n" <<
     "'decide <percentage for yes>'\n" <<
     "'decide <item> {<item>}' (returns one item from the ones listed)\n" <<
-    "'decide -amount <int> {<item>}' (returns <int> items from the ones listed)\n" <<
-    "'decide -range <inclusive_bound> <other_inclusive_bound>' (returns an int value between <inclusive_bound> and <other_inclusive_bound>)\n" <<
-    "'decide -group <int> {<item>}' (creates groups with <int> members randomly out of the given items)";
+    "'decide --amount | -a <int> {<item>}' (returns <int> items from the ones listed)\n" <<
+    "'decide --range | -r <inclusive_bound> <other_inclusive_bound>' (returns an int value between <inclusive_bound> and <other_inclusive_bound>)\n" <<
+    "'decide --group | -g <int> {<item>}' (creates groups with <int> members randomly out of the given items)";
 }
 
 void amount_flag(const char** args, const int argc, std::mt19937& rng) {
-  if (is_number(args[0])) {
+  if (is_number(args[0], false)) {
     long long val;
     try {
       val = std::stoll(args[0]);
@@ -94,22 +94,23 @@ void amount_flag(const char** args, const int argc, std::mt19937& rng) {
 
 void range_flag(const char** args, const int argc, std::mt19937& rng) {
   if (argc < 2) {
-    std::cout << "Too few arguments! Expected: -range <inclusive bound> <other inclusive bound>";
+    std::cout << "Too few arguments! Expected: --range <inclusive bound> <other inclusive bound>";
     return;
   }
 
-  if (!is_number(args[0]) || !is_number(args[1])) {
+  if (!is_number(args[0], true) || !is_number(args[1], true)) {
     std::cout << "Entered bounds aren't valid numbers!"; 
     return;
   }
 
   long long min;
   long long max;
+
   try {
     min = std::stoll(args[0]);
     max = std::stoll(args[1]);
   } catch (std::out_of_range& e) {
-    std::cout << "At least one of the values is out of bounds!";
+    std::cout << "One or both values are out of bounds!";
     return;
   }
 
@@ -122,11 +123,11 @@ void range_flag(const char** args, const int argc, std::mt19937& rng) {
 
 void group_flag(const char** args, const int argc, std::mt19937& rng) {
   if (!argc) {
-    std::cout << "Too few arguments! Expected: -group <group size> <item> {<item>}";
+    std::cout << "Too few arguments! Expected: --group <group size> {<item>}";
     return;
   }
 
-  if (!is_number(args[0])) {
+  if (!is_number(args[0], false)) {
     std::cout << "Invalid group size!";
     return;
   }
@@ -161,17 +162,17 @@ int main(const int argc, const char** argv) {
   }
 
   if (argv[1][0] == '-') {
-    std::unordered_map<std::string, void(*)(const char**, const int, std::mt19937&)> funcs {
-      {"-help", help_flag}, {"-h", help_flag},
-      {"-amount", amount_flag},
-      {"-range", range_flag},
-      {"-group", group_flag}
+    std::unordered_map<std::string, void (*)(const char**, const int, std::mt19937&)> flags {
+      {"--help", help_flag}, {"-h", help_flag},
+      {"--amount", amount_flag}, {"-a", amount_flag},
+      {"--range", range_flag}, {"-r", range_flag},
+      {"--group", group_flag}, {"-g", group_flag}
     };
 
     std::string flag {argv[1]};
-    const auto& it {funcs.find(flag)};
+    const auto& it {flags.find(flag)};
 
-    if (it != funcs.end()) {
+    if (it != flags.end()) {
       it->second(argv + 2, argc - 2, rng);
       std::cout << '\n';
       return 0;
@@ -179,10 +180,10 @@ int main(const int argc, const char** argv) {
   }
 
   if (argc == 2) {
-    if (is_number(argv[1])) {
+    if (is_number(argv[1], false)) {
       std::uniform_int_distribution<int> percentage_dist {0, 100};
-
       int percent;
+
       try {
         percent = std::stoi(argv[1]);
         if (percent < 0 || percent > 100) {
